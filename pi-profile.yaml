@@ -1,0 +1,30 @@
+assets: .
+
+include:
+  - interface.json
+  - tasks/**
+  - resource_pack/**
+  - assets/**
+  - preset/**
+  - README.md
+  - LICENSE
+
+exclude:
+  - .git/**
+  - doc/**
+  - agent/**
+
+agent:
+  sourceDir: agent-dist
+  abi: [arm64-v8a]
+  runtimes:
+    - location: nativeLibs
+      executable: libmaayys_agent.so
+      env:
+        LD_LIBRARY_PATH: "{nativeLibs}"
+        MAAFW_BINARY_PATH: "{nativeLibs}"
+
+app:
+  id: maayys
+  label: MaaYYs
+  icon: assets/logo/logo.png
