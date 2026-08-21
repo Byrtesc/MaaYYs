@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "android-v*"
     paths:
       - ".github/workflows/android-apk.yml"
       - "agent/**"
@@ -17,7 +19,7 @@ on:
       - "README.md"
       - "LICENSE"
 permissions:
-  contents: read
+  contents: write
 
 env:
   GO_VERSION: "1.24"
@@ -32,7 +34,7 @@ env:
 
 jobs:
   build-apk:
-    name: Android ARM64 Debug APK
+    name: Android Debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -83,6 +85,24 @@ jobs:
             "ndk;${ANDROID_NDK}" \
             "cmake;${ANDROID_CMAKE}"
 
+      - name: Resolve APK version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/android-v* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if [[ ! "${tag}" =~ ^android-v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Invalid Android release tag: ${tag}"
+              exit 1
+            fi
+            version="${tag#android-}"
+          else
+            version="ci.${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "asset_name=MaaYYs-android-${version}.apk" >> "${GITHUB_OUTPUT}"
+
       - name: Test Go Agent
         working-directory: agent
         shell: bash
@@ -90,21 +110,32 @@ jobs:
           go test ./...
           go build ./...
 
-      - name: Build Android ARM64 Agent
+      - name: Build Android Agents
         working-directory: agent
         shell: bash
         env:
           GOOS: android
-          GOARCH: arm64
           CGO_ENABLED: "1"
+          AGENT_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          export CC="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${ANDROID_API}-clang"
-          mkdir -p ../agent-dist/arm64-v8a/jniLibs
-          go build -trimpath \
-            -ldflags="-s -w -X main.Version=${GITHUB_REF_NAME}" \
-            -o ../agent-dist/arm64-v8a/jniLibs/libmaayys_agent.so \
-            .
-          test -s ../agent-dist/arm64-v8a/jniLibs/libmaayys_agent.so
+          build_agent() {
+            local abi="$1"
+            local goarch="$2"
+            local compiler_prefix="$3"
+            local output="../agent-dist/${abi}/jniLibs/libmaayys_agent.so"
+
+            mkdir -p "$(dirname "${output}")"
+            GOARCH="${goarch}" \
+            CC="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/${compiler_prefix}-linux-android${ANDROID_API}-clang" \
+            go build -trimpath \
+              -ldflags="-s -w -X main.Version=${AGENT_VERSION}" \
+              -o "${output}" \
+              .
+            test -s "${output}"
+          }
+
+          build_agent arm64-v8a arm64 aarch64
+          build_agent x86_64 amd64 x86_64
 
       - name: Configure MaaFwApp
         shell: bash
@@ -112,17 +143,16 @@ jobs:
           {
             echo "sdk.dir=${ANDROID_SDK_ROOT}"
             echo "pi.profile=${GITHUB_WORKSPACE}/pi-profile.yaml"
-            echo "build.debugAbi=arm64-v8a"
           } > MaaFwApp/local.properties
 
-      - name: Install MaaFramework Android ARM64
+      - name: Install MaaFramework Android libraries
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           uv run python MaaFwApp/scripts/setup_maa_framework.py \
             --tag "${MAAFW_VERSION}" \
-            --abi arm64-v8a
+            --abi all
 
       - name: Build Debug APK
         working-directory: MaaFwApp
@@ -131,29 +161,52 @@ jobs:
 
       - name: Verify APK
         shell: bash
+        env:
+          ASSET_NAME: ${{ steps.version.outputs.asset_name }}
         run: |
-          APK="MaaFwApp/app/build/outputs/apk/debug/app-debug.apk"
-          test -s "${APK}"
-          unzip -Z1 "${APK}" > "${RUNNER_TEMP}/apk-entries.txt"
-          grep -Fxq "lib/arm64-v8a/libmaayys_agent.so" "${RUNNER_TEMP}/apk-entries.txt"
-          grep -Fxq "lib/arm64-v8a/libMaaFramework.so" "${RUNNER_TEMP}/apk-entries.txt"
-          grep -Fxq "lib/arm64-v8a/libMaaAndroidNativeControlUnit.so" "${RUNNER_TEMP}/apk-entries.txt"
+          source_apk="MaaFwApp/app/build/outputs/apk/debug/app-debug.apk"
+          final_apk="dist/${ASSET_NAME}"
+          test -s "${source_apk}"
+          mkdir -p dist
+          cp "${source_apk}" "${final_apk}"
+
+          unzip -Z1 "${final_apk}" > "${RUNNER_TEMP}/apk-entries.txt"
+          for abi in arm64-v8a x86_64; do
+            grep -Fxq "lib/${abi}/libmaayys_agent.so" "${RUNNER_TEMP}/apk-entries.txt"
+            grep -Fxq "lib/${abi}/libMaaFramework.so" "${RUNNER_TEMP}/apk-entries.txt"
+            grep -Fxq "lib/${abi}/libMaaAndroidNativeControlUnit.so" "${RUNNER_TEMP}/apk-entries.txt"
+          done
           grep -Fxq "assets/pi.zip" "${RUNNER_TEMP}/apk-entries.txt"
-          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/.*\.so$' "${RUNNER_TEMP}/apk-entries.txt"; then
-            echo "::error::APK contains an unexpected non-ARM64 native library."
+          if grep -Eq '^lib/(armeabi-v7a|x86)/.*\.so$' "${RUNNER_TEMP}/apk-entries.txt"; then
+            echo "::error::APK contains an unexpected 32-bit native library."
             exit 1
           fi
 
-          unzip -p "${APK}" assets/pi.zip > "${RUNNER_TEMP}/pi.zip"
+          unzip -p "${final_apk}" assets/pi.zip > "${RUNNER_TEMP}/pi.zip"
           unzip -Z1 "${RUNNER_TEMP}/pi.zip" > "${RUNNER_TEMP}/pi-entries.txt"
           grep -Fxq "interface.json" "${RUNNER_TEMP}/pi-entries.txt"
           grep -Eq '^tasks/.+' "${RUNNER_TEMP}/pi-entries.txt"
           grep -Eq '^resource_pack/.+/pipeline/.+' "${RUNNER_TEMP}/pi-entries.txt"
 
+          "${ANDROID_SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" \
+            verify --verbose "${final_apk}"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MaaYYs-android-arm64-debug-${{ github.run_number }}
-          path: MaaFwApp/app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ steps.version.outputs.asset_name }}
+          path: dist/${{ steps.version.outputs.asset_name }}
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish Android prerelease
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: MaaYYs Android ${{ steps.version.outputs.version }}
+          files: dist/${{ steps.version.outputs.asset_name }}
+          fail_on_unmatched_files: true
+          prerelease: true
+          draft: false
+          generate_release_notes: true

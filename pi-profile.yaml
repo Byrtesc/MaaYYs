@@ -16,7 +16,7 @@ exclude:
 
 agent:
   sourceDir: agent-dist
-  abi: [arm64-v8a]
+  abi: [arm64-v8a, x86_64]
   runtimes:
     - location: nativeLibs
       executable: libmaayys_agent.so
