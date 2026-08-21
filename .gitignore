@@ -11,6 +11,7 @@
 /cache
 /.claude
 /agent/agent.exe
+/agent-dist/
 /debug/
 /.nicegui/
 /mxu.exe

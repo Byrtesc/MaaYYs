@@ -31,7 +31,10 @@ func main() {
 		Msg("Starting agent server")
 
 	// 初始化MAA框架
-	libDir := filepath.Join(getCwd(), "maafw")
+	libDir := os.Getenv("MAAFW_BINARY_PATH")
+	if libDir == "" {
+		libDir = filepath.Join(getCwd(), "maafw")
+	}
 	log.Info().
 		Str("libDir", libDir).
 		Msg("Initializing MAA framework")
@@ -106,8 +109,14 @@ func getCwd() string {
 }
 
 func agentIdentifier(args []string) (string, error) {
-	if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+	if len(args) < 2 {
 		return "", fmt.Errorf("usage: %s <identifier>", filepath.Base(args[0]))
 	}
-	return args[1], nil
+
+	identifier := strings.TrimSpace(args[len(args)-1])
+	if identifier == "" {
+		return "", fmt.Errorf("missing agent identifier")
+	}
+
+	return identifier, nil
 }
