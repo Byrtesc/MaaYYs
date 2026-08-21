@@ -4,29 +4,6 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+*"
-    branches:
-      - "**"
-    paths:
-      - ".github/workflows/build-release.yml"
-      - ".github/cliff.toml"
-      - "agent/**"
-      - "assets/**"
-      - "resource_pack/**"
-      - "tasks/**"
-      - "interface.json"
-      - "README.md"
-  pull_request:
-    branches:
-      - "**"
-    paths:
-      - ".github/workflows/build-release.yml"
-      - ".github/cliff.toml"
-      - "agent/**"
-      - "assets/**"
-      - "resource_pack/**"
-      - "tasks/**"
-      - "interface.json"
-      - "README.md"
   workflow_dispatch:
 
 permissions:
