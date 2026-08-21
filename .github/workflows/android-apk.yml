@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "**"
+      - main
     paths:
       - ".github/workflows/android-apk.yml"
       - "agent/**"
@@ -16,19 +16,6 @@ on:
       - "pi-profile.yaml"
       - "README.md"
       - "LICENSE"
-  pull_request:
-    paths:
-      - ".github/workflows/android-apk.yml"
-      - "agent/**"
-      - "assets/**"
-      - "preset/**"
-      - "resource_pack/**"
-      - "tasks/**"
-      - "interface.json"
-      - "pi-profile.yaml"
-      - "README.md"
-      - "LICENSE"
-
 permissions:
   contents: read
 
