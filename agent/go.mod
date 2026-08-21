@@ -4,6 +4,8 @@ go 1.24
 
 require github.com/MaaXYZ/maa-framework-go/v4 v4.0.0-beta.12
 
+replace github.com/MaaXYZ/maa-framework-go/v4 => github.com/Byrtesc/maa-framework-go/v4 v4.0.0-beta.12-android.1
+
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
